@@ -150,3 +150,7 @@ CLAUDE.md                # Full architecture doc (agents read this)
 PRs welcome. If you're using Claude Code, it already knows the codebase — just tell it what you want to build and point it at `CLAUDE.md`.
 
 Got feedback? DM me on X [@farzatv](https://x.com/farzatv).
+
+## Web version
+
+A cross-platform port of Clicky for the web lives under [`web/`](./web). It is a TypeScript monorepo (`@clicky/core`, `@clicky/react`, `@clicky/proxy`) that drops a floating AI companion into any React, Next.js, Vue or vanilla web app — same idea as the macOS version but reading the DOM directly instead of capturing screenshots, and pointing at real DOM elements via SVG spotlight instead of the OS cursor. See [`web/README.md`](./web/README.md) for the quickstart and examples.

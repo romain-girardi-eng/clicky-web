@@ -102,6 +102,19 @@ At list pricing that's roughly **$0.04 per conversation**. A free-tier SaaS doin
 
 The two projects share a name and a design instinct, nothing else.
 
+## Differences vs the macOS version
+
+The macOS app at the root of this repo (`leanring-buddy/`) and the web SDK in `web/` share a name and a design instinct. They differ everywhere it matters technically:
+
+| Aspect              | macOS                                            | Web                                              |
+|---------------------|--------------------------------------------------|--------------------------------------------------|
+| Page understanding  | Screenshots via ScreenCaptureKit                 | DOM snapshot (text + landmarks + buttons + forms) |
+| Element pointing    | `[POINT:x,y:label:screenN]` text tag, OS cursor  | Anthropic tool_use call, SVG spotlight on real DOM |
+| Voice STT           | AssemblyAI streaming push-to-talk                | Native `SpeechRecognition` (opt-in)              |
+| Voice TTS           | ElevenLabs Flash 2.5                             | Native `SpeechSynthesis` (opt-in)                |
+| Trigger             | Global hotkey + menu bar panel                   | Floating launcher + drawer                       |
+| Distribution        | DMG / Sparkle                                    | npm packages (`@clicky/core`, `@clicky/react`)   |
+
 ## Repository layout
 
 ```
@@ -109,8 +122,7 @@ web/
   packages/
     core/             vanilla TS, framework-agnostic widget + agent
     react/            React provider, hooks, widget wrapper
-    proxy-vercel/     copy-paste Edge function for Vercel
-    proxy-cloudflare/ copy-paste Worker for Cloudflare
+    proxy/            Vercel Edge + Cloudflare Worker templates
   examples/
     vanilla/          single index.html
     react-vite/       Vite + React + react-router
