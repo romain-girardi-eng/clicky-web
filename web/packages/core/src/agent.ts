@@ -72,6 +72,12 @@ export class ClickyAgent {
   private historyForLLM: ChatMessage[] = []
   private currentState: AgentState = 'idle'
   private abortController: AbortController | null = null
+  // Guard against concurrent/duplicate ask() invocations. The widget's send
+  // path can fire twice in quick succession (React StrictMode re-mount,
+  // keydown + click double-dispatch, rAF races), which used to push the same
+  // user message into the history twice. A single in-flight flag is enough —
+  // all real calls complete before the next one lands.
+  private busy = false
 
   constructor(private readonly config: ClickyConfig) {
     this.dom = new DomReader()
@@ -151,13 +157,20 @@ export class ClickyAgent {
   }
 
   async ask(text: string): Promise<void> {
-    if (!text.trim()) return
-    this.appendMessage({ id: makeId(), role: 'user', text, createdAt: Date.now() })
-    this.historyForLLM.push({
-      role: 'user',
-      content: [{ type: 'text', text: this.composeUserMessage(text) }],
-    })
-    await this.runLoop()
+    const trimmed = text.trim()
+    if (!trimmed) return
+    if (this.busy) return
+    this.busy = true
+    try {
+      this.appendMessage({ id: makeId(), role: 'user', text: trimmed, createdAt: Date.now() })
+      this.historyForLLM.push({
+        role: 'user',
+        content: [{ type: 'text', text: this.composeUserMessage(trimmed) }],
+      })
+      await this.runLoop()
+    } finally {
+      this.busy = false
+    }
   }
 
   /* ----- internals ----- */
@@ -182,6 +195,36 @@ export class ClickyAgent {
 
   private async runLoop(): Promise<void> {
     const maxTurns = 5
+    // A single ask() produces a single visible assistant bubble, even if the
+    // underlying conversation spans several LLM turns (text → tool → text).
+    // We create the assistant AgentMessage lazily on the first non-empty text
+    // and mutate its `text` on every subsequent turn, so the widget keeps
+    // rendering the same bubble and only its content grows.
+    let assistantMessage: AgentMessage | null = null
+    const appendAssistantText = (chunk: string): void => {
+      const trimmed = chunk.trim()
+      if (!trimmed) return
+      if (!assistantMessage) {
+        assistantMessage = { id: makeId(), role: 'assistant', text: trimmed, createdAt: Date.now() }
+        this.appendMessage(assistantMessage)
+      } else {
+        assistantMessage.text = assistantMessage.text
+          ? `${assistantMessage.text}\n\n${trimmed}`
+          : trimmed
+        this.notify()
+      }
+      this.historyForLLM.push({
+        role: 'assistant',
+        content: [{ type: 'text', text: trimmed }],
+      })
+      // Legacy-safe: if TTS output is enabled but autoSpeak is not (so we
+      // did not stream per-sentence during the response), speak the whole
+      // chunk now.
+      if (this.config.voice?.output && !this.config.voice?.autoSpeak) {
+        void this.voiceOutput.speak(trimmed)
+      }
+    }
+
     for (let turn = 0; turn < maxTurns; turn += 1) {
       this.setState('thinking')
       this.abortController = new AbortController()
@@ -210,18 +253,7 @@ export class ClickyAgent {
       const visibleText = text.trim() || doneMessage
 
       if (visibleText) {
-        const message: AgentMessage = { id: makeId(), role: 'assistant', text: visibleText, createdAt: Date.now() }
-        this.appendMessage(message)
-        this.historyForLLM.push({
-          role: 'assistant',
-          content: [{ type: 'text', text: visibleText }],
-        })
-        // Legacy-safe: if TTS output is enabled but autoSpeak is not (so we
-        // did not stream per-sentence during the response), speak the whole
-        // message now.
-        if (this.config.voice?.output && !this.config.voice?.autoSpeak) {
-          void this.voiceOutput.speak(visibleText)
-        }
+        appendAssistantText(visibleText)
       }
 
       // If the model called `done`, the turn is over. Don't loop, don't
