@@ -23,6 +23,8 @@ import { VoiceIO } from './voice-io'
 import { AnimatedCursor } from './animated-cursor'
 import { InlinePointParser, type PointTag } from './inline-point-parser'
 import { VoiceOutput, SentenceBuffer } from './voice-output'
+import { ElevenLabsVoiceOutput, type VoiceOutputLike } from './voice-output-elevenlabs'
+import { SpeechBubbleOverlay } from './speech-bubble'
 import type {
   ActionDefinition,
   AgentMessage,
@@ -62,7 +64,9 @@ export class ClickyAgent {
   readonly actions: ActionRegistry
   readonly voice: VoiceIO
   readonly cursor: AnimatedCursor
-  readonly voiceOutput: VoiceOutput
+  readonly voiceOutput: VoiceOutputLike
+  readonly speechBubble: SpeechBubbleOverlay
+  private readonly nativeVoiceOutput: VoiceOutput
 
   private readonly provider: ChatProvider
   private readonly readables = new Map<string, InternalReadable>()
@@ -91,7 +95,9 @@ export class ClickyAgent {
       lerpFactor: config.cursor?.lerpFactor,
       idleAnimation: config.cursor?.idleAnimation ?? true,
     })
-    this.voiceOutput = new VoiceOutput(lang)
+    this.nativeVoiceOutput = new VoiceOutput(lang)
+    this.voiceOutput = resolveVoiceOutput(config, this.nativeVoiceOutput)
+    this.speechBubble = new SpeechBubbleOverlay(this.cursor)
     this.provider = resolveProvider(config)
     this.registerBuiltInActions()
   }
@@ -106,6 +112,7 @@ export class ClickyAgent {
     this.dom.start()
     this.overlay.mount()
     this.cursor.mount()
+    this.speechBubble.mount()
     void target
   }
 
@@ -114,6 +121,7 @@ export class ClickyAgent {
     this.dom.stop()
     this.overlay.unmount()
     this.cursor.unmount()
+    this.speechBubble.unmount()
     this.voiceOutput.stop()
   }
 
@@ -217,6 +225,9 @@ export class ClickyAgent {
         role: 'assistant',
         content: [{ type: 'text', text: trimmed }],
       })
+      // Show the full chunk in the speech bubble — the cursor speaks.
+      const bubbleText = assistantMessage?.text ?? trimmed
+      this.speechBubble.show(bubbleText, { typewriter: true })
       // Legacy-safe: if TTS output is enabled but autoSpeak is not (so we
       // did not stream per-sentence during the response), speak the whole
       // chunk now.
@@ -307,6 +318,9 @@ export class ClickyAgent {
         const { visibleText, points } = pointParser.push(event.text)
         if (visibleText) {
           text += visibleText
+          // Mirror into the speech bubble live so the user sees the
+          // cursor "speak" as the LLM streams.
+          this.speechBubble.update(text)
           if (autoSpeak) {
             const sentences = sentenceBuffer.push(visibleText)
             for (const sentence of sentences) void this.voiceOutput.speak(sentence)
@@ -403,6 +417,29 @@ const makeId = (): string => Math.random().toString(36).slice(2, 10)
  * by OpenRouter and most gateways. A bare "claude-*" keeps the native
  * Anthropic provider for backward compatibility.
  */
+/**
+ * Pick the TTS backend. `'elevenlabs'` needs a proxy URL; if it's missing
+ * or the runtime can't play audio, we silently fall back to Web Speech.
+ */
+const resolveVoiceOutput = (config: ClickyConfig, fallback: VoiceOutput): VoiceOutputLike => {
+  const provider = config.voice?.output
+  if (provider === 'elevenlabs') {
+    const el = config.voice?.elevenlabs
+    if (el?.proxyUrl && ElevenLabsVoiceOutput.isSupported()) {
+      return new ElevenLabsVoiceOutput({
+        proxyUrl: el.proxyUrl,
+        voiceId: el.voiceId,
+        onError: (err: Error) => {
+          if (typeof console !== 'undefined') console.warn('[clicky] elevenlabs TTS error, falling back:', err.message)
+          // Best-effort fallback — speak the last sentence via Web Speech.
+        },
+      })
+    }
+    return fallback
+  }
+  return fallback
+}
+
 const resolveProvider = (config: ClickyConfig): ChatProvider => {
   const provider = config.provider
   if (provider && typeof provider === 'object') return provider

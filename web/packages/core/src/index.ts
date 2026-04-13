@@ -16,7 +16,12 @@ export { OpenAIProvider } from './openai-client'
 export { VoiceIO } from './voice-io'
 export { VoiceInput } from './voice-input'
 export { VoiceOutput, SentenceBuffer } from './voice-output'
+export { ElevenLabsVoiceOutput } from './voice-output-elevenlabs'
+export type { VoiceOutputLike, ElevenLabsVoiceOutputConfig } from './voice-output-elevenlabs'
+export { SpeechBubbleOverlay } from './speech-bubble'
+export type { SpeechBubbleOptions } from './speech-bubble'
 export { AnimatedCursor } from './animated-cursor'
+export type { CursorMood } from './animated-cursor'
 export { InlinePointParser } from './inline-point-parser'
 export type { PointTag } from './inline-point-parser'
 export { HotkeyManager, parseCombo } from './hotkey'
@@ -35,6 +40,7 @@ export type {
   ClickyHotkeyConfig,
   ClickyTheme,
   ClickyVoiceConfig,
+  ClickyWidgetConfig,
   JsonSchema,
   ReadableGetter,
   StreamEvent,
@@ -59,6 +65,7 @@ export const createClicky = (config: ClickyConfig): ClickyInstance => {
     locale: config.locale,
     voice: config.voice ? { input: config.voice.input, output: config.voice.output, lang: config.voice.lang } : undefined,
     hotkey: config.hotkey,
+    autoOpenOnMessage: config.widget?.autoOpenOnMessage ?? false,
   })
   return {
     agent,

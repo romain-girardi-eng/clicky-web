@@ -10,9 +10,10 @@ export interface ClickyWidgetProps {
   primary?: string
   voice?: ClickyVoiceConfig
   hotkey?: ClickyHotkeyConfig
+  autoOpenOnMessage?: boolean
 }
 
-export const ClickyWidget = ({ locale, primary, voice, hotkey }: ClickyWidgetProps): JSX.Element => {
+export const ClickyWidget = ({ locale, primary, voice, hotkey, autoOpenOnMessage = false }: ClickyWidgetProps): JSX.Element => {
   const agent = useClicky()
   const containerRef = useRef<HTMLDivElement | null>(null)
   const widgetRef = useRef<Widget | null>(null)
@@ -24,6 +25,7 @@ export const ClickyWidget = ({ locale, primary, voice, hotkey }: ClickyWidgetPro
       theme: primary ? { primary } : undefined,
       voice: voice ? { input: voice.input, output: voice.output, lang: voice.lang } : undefined,
       hotkey,
+      autoOpenOnMessage,
     })
     widget.mount(containerRef.current)
     widgetRef.current = widget
@@ -31,7 +33,7 @@ export const ClickyWidget = ({ locale, primary, voice, hotkey }: ClickyWidgetPro
       widget.unmount()
       widgetRef.current = null
     }
-  }, [agent, locale, primary, voice, hotkey])
+  }, [agent, locale, primary, voice, hotkey, autoOpenOnMessage])
 
   return <div ref={containerRef} data-clicky-widget-mount />
 }

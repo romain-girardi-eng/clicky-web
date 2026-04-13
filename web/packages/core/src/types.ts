@@ -74,9 +74,22 @@ export interface ClickyTheme {
 
 export interface ClickyVoiceConfig {
   input?: boolean
-  output?: boolean
+  /**
+   * Voice output provider. `true` / `'native'` uses the Web Speech API.
+   * `'elevenlabs'` streams MP3 from the configured proxy. `false` disables.
+   */
+  output?: boolean | 'native' | 'elevenlabs'
   autoSpeak?: boolean
   lang?: string
+  elevenlabs?: {
+    proxyUrl: string
+    voiceId?: string
+  }
+}
+
+export interface ClickyWidgetConfig {
+  /** When true, incoming assistant messages open the chat drawer automatically. Default false — the speech bubble is the primary UI. */
+  autoOpenOnMessage?: boolean
 }
 
 export interface ClickyHotkeyConfig {
@@ -106,6 +119,7 @@ export interface ClickyConfig {
   maxTokens?: number
   hotkey?: ClickyHotkeyConfig
   cursor?: ClickyCursorConfig
+  widget?: ClickyWidgetConfig
 }
 
 export interface AgentMessage {

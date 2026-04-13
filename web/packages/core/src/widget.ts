@@ -24,12 +24,14 @@ export interface WidgetOptions {
   locale?: 'en' | 'fr'
   voice?: {
     input?: boolean
-    output?: boolean
+    output?: boolean | 'native' | 'elevenlabs'
     lang?: string
   }
   hotkey?: {
     activate?: string
   }
+  /** Open the chat drawer when a message arrives (legacy). Default false: bubble + voice are primary. */
+  autoOpenOnMessage?: boolean
 }
 
 type Locale = 'en' | 'fr'
@@ -306,7 +308,7 @@ export class Widget {
       ({ pressed }) => {
         if (!this.voiceInput) return
         if (pressed) {
-          if (!this.isOpen) this.toggle()
+          if (this.options.autoOpenOnMessage && !this.isOpen) this.toggle()
           this.startVoiceRecording()
         } else {
           this.stopVoiceRecording(true)

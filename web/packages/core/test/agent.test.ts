@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { ClickyAgent } from '../src/agent'
 import { MockProvider } from '../src/llm-client'
 import type { ChatProvider, ChatRequest, StreamEvent } from '../src/types'
@@ -76,6 +76,33 @@ describe('ClickyAgent with MockProvider', () => {
     expect(assistantMessages).toHaveLength(1)
     expect(assistantMessages[0]?.text).toContain("J'ouvre le formulaire")
     expect(assistantMessages[0]?.text).toContain("J'ai ouvert le formulaire")
+    agent.unmount()
+  })
+
+  it('drives the speech bubble with the assistant text when a reply arrives', async () => {
+    const provider: ChatProvider = {
+      async *streamChat(_request: ChatRequest): AsyncIterable<StreamEvent> {
+        yield { type: 'text_delta', text: 'Salut ' }
+        yield { type: 'text_delta', text: 'Romain' }
+        yield { type: 'message_stop' }
+      },
+    }
+    const agent = new ClickyAgent({ apiUrl: 'mock://', provider })
+    const showSpy = vi.fn()
+    const updateSpy = vi.fn()
+    // Swap the bubble's public surface with spies.
+    ;(agent as unknown as { speechBubble: { show: unknown; update: unknown; mount: () => void; unmount: () => void } }).speechBubble = {
+      show: showSpy,
+      update: updateSpy,
+      mount: () => {},
+      unmount: () => {},
+    }
+    agent.mount()
+    await agent.ask('bonjour')
+    expect(updateSpy).toHaveBeenCalled()
+    const lastCall = updateSpy.mock.calls[updateSpy.mock.calls.length - 1]
+    expect(String(lastCall?.[0] ?? '')).toContain('Salut Romain')
+    expect(showSpy).toHaveBeenCalled()
     agent.unmount()
   })
 
