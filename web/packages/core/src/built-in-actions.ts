@@ -7,17 +7,19 @@
 import type { ActionDefinition, ClickyConfig } from './types'
 import type { DomReader } from './dom-reader'
 import type { HighlightOverlay } from './highlight-overlay'
+import type { AnimatedCursor } from './animated-cursor'
 import { ScreenCapture } from './screen-capture'
 
 export interface BuiltInDeps {
   dom: DomReader
   overlay: HighlightOverlay
   config: ClickyConfig
+  cursor?: AnimatedCursor
   onAssistantText: (text: string) => void
 }
 
 export const createBuiltInActions = (deps: BuiltInDeps): ActionDefinition[] => {
-  const { dom, overlay, config, onAssistantText } = deps
+  const { dom, overlay, config, cursor, onAssistantText } = deps
 
   const resolveTarget = (target: string): Element => {
     const element = dom.resolveElement(target)
@@ -29,11 +31,11 @@ export const createBuiltInActions = (deps: BuiltInDeps): ActionDefinition[] => {
     {
       name: 'highlight',
       description:
-        'Visually highlight an element on the page so the user can see what you are referring to. The target is a CSS selector or a short semantic description like "checkout button".',
+        'Visually highlight an element on the page so the user can see what you are referring to. Pass the stable #c-N id from the page snapshot (preferred) or a short semantic description.',
       schema: {
         type: 'object',
         properties: {
-          target: { type: 'string', description: 'CSS selector or semantic description of the element.' },
+          target: { type: 'string', description: 'Stable #c-N id or semantic description of the element.' },
           message: { type: 'string', description: 'Optional short label rendered next to the highlight.' },
         },
         required: ['target'],
@@ -42,21 +44,26 @@ export const createBuiltInActions = (deps: BuiltInDeps): ActionDefinition[] => {
         const { target, message } = input as { target: string; message?: string }
         const element = resolveTarget(target)
         overlay.spotlight(element, { message })
+        if (cursor) void cursor.flyTo(element as HTMLElement, { label: message })
         return { ok: true }
       },
     },
     {
       name: 'click',
-      description: 'Click an element on behalf of the user. Use only when the user explicitly asks you to.',
+      description: 'Click an element on behalf of the user. Fly the cursor to it first, then dispatch the click. Pass #c-N from the page snapshot.',
       schema: {
         type: 'object',
-        properties: { target: { type: 'string' } },
+        properties: {
+          target: { type: 'string', description: 'Stable #c-N id or semantic description.' },
+          label: { type: 'string', description: 'Optional label shown next to the cursor during flight.' },
+        },
         required: ['target'],
       },
       handler: async (input) => {
-        const { target } = input as { target: string }
+        const { target, label } = input as { target: string; label?: string }
         const element = resolveTarget(target) as HTMLElement
-        element.click()
+        if (cursor) await cursor.clickElement(element, label)
+        else element.click()
         return { ok: true }
       },
     },

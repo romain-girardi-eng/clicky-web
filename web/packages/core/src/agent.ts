@@ -35,16 +35,18 @@ import type {
 } from './types'
 
 const DEFAULT_MODEL = 'claude-sonnet-4-5'
-const DEFAULT_SYSTEM = `You are Clicky, an embedded assistant inside a web application.
-You can see a compact summary of the page the user is currently on (provided as JSON in the user message) and you have tools to highlight, click, fill, navigate, read, and finish.
+const DEFAULT_SYSTEM = `You are Clicky, a living companion embedded inside a web application. You are NOT a chatbot — you ACT.
 
-Two ways to point at UI elements:
-1) Inline tag: embed \`[POINT:<selector>:<label>]\` directly in your response. The web client parses these tags, strips them from the displayed text, and flies a blue cursor to the target. Example: "Pour créer un reçu, cliquez [POINT:button[aria-label='Générer un reçu']:Générer un reçu]."
-2) Tool call: use the \`highlight\` tool for a persistent spotlight with a longer message.
+Each user message is accompanied by a snapshot of the current page. Every interactive element is listed with a stable id in the form [c-N]. To point at, click or fill an element, always reference it by #c-N. Never invent selectors.
 
-Use the inline tag for quick visual pointers during an explanation, and the \`highlight\` tool when the user actually needs the element to stay visually marked.
-
-Keep responses short, concrete, and grounded in what is actually visible. You may use markdown (bold, italics, bullet lists, code). Always finish with the "done" tool when the user request is satisfied.`
+RULES
+- Prefer doing over explaining. If the user asks "how do I X", navigate, point, and click — don't paste a paragraph.
+- Maximum 2 short sentences of text per answer, unless the question is purely conceptual.
+- Inline pointing tag: \`[POINT:#c-N:Short label]\`. The client strips the tag and flies a cursor to the element. Use this whenever you name a button, link or field.
+- Tools: \`click\`, \`fill\`, \`navigate\`, \`highlight\`, \`read\`, \`done\`. Pass targets as #c-N.
+- If the relevant UI is on another page, \`navigate\` first, then point/click after the new snapshot arrives next turn.
+- Always \`done\` when the task is satisfied, with a one-sentence confirmation.
+- Match the user's language (default French).`
 
 type AgentListener = (state: { state: AgentState; messages: AgentMessage[] }) => void
 export type PointingListener = (tag: PointTag) => void
@@ -161,7 +163,9 @@ export class ClickyAgent {
   /* ----- internals ----- */
 
   private composeUserMessage(text: string): string {
+    this.dom.invalidate()
     const snapshot = this.dom.snapshot()
+    const pageText = this.dom.snapshotAsText(snapshot)
     const readableValues: Record<string, unknown> = {}
     for (const readable of this.readables.values()) {
       try {
@@ -170,11 +174,10 @@ export class ClickyAgent {
         readableValues[readable.label] = null
       }
     }
-    const context = {
-      page: snapshot,
-      app: readableValues,
-    }
-    return `<user_request>${text}</user_request>\n<page_context>${JSON.stringify(context).slice(0, 12000)}</page_context>`
+    const readablesBlock = Object.keys(readableValues).length
+      ? `\n<app_state>${JSON.stringify(readableValues).slice(0, 4000)}</app_state>`
+      : ''
+    return `<user_request>${text}</user_request>\n<page_snapshot>\n${pageText.slice(0, 8000)}\n</page_snapshot>${readablesBlock}`
   }
 
   private async runLoop(): Promise<void> {
@@ -329,6 +332,7 @@ export class ClickyAgent {
       dom: this.dom,
       overlay: this.overlay,
       config: this.config,
+      cursor: this.cursor,
       // Fallback path: if `done` is somehow executed as a regular tool (older
       // call sites, custom providers), the message still surfaces in the chat.
       onAssistantText: (text: string) => {
