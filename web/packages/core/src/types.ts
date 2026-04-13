@@ -85,7 +85,7 @@ export interface ClickyConfig {
   theme?: ClickyTheme
   locale?: 'en' | 'fr'
   navigate?: (url: string) => void
-  provider?: ChatProvider
+  provider?: ChatProvider | 'anthropic' | 'openai'
   maxTokens?: number
 }
 

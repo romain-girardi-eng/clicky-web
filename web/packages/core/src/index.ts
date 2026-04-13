@@ -12,6 +12,7 @@ export { DomReader } from './dom-reader'
 export { HighlightOverlay } from './highlight-overlay'
 export { ActionRegistry, validateAgainstSchema } from './action-registry'
 export { AnthropicProvider, MockProvider } from './llm-client'
+export { OpenAIProvider } from './openai-client'
 export { VoiceIO } from './voice-io'
 export { createBuiltInActions } from './built-in-actions'
 export type {

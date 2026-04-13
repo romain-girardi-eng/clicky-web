@@ -17,6 +17,7 @@ import { ActionRegistry } from './action-registry'
 import { DomReader } from './dom-reader'
 import { HighlightOverlay } from './highlight-overlay'
 import { AnthropicProvider, MockProvider } from './llm-client'
+import { OpenAIProvider } from './openai-client'
 import { createBuiltInActions } from './built-in-actions'
 import { VoiceIO } from './voice-io'
 import type {
@@ -63,7 +64,7 @@ export class ClickyAgent {
     this.overlay = new HighlightOverlay()
     this.actions = new ActionRegistry()
     this.voice = new VoiceIO(config.locale === 'fr' ? 'fr-FR' : 'en-US')
-    this.provider = config.provider ?? new AnthropicProvider(config.apiUrl)
+    this.provider = resolveProvider(config)
     this.registerBuiltInActions()
   }
 
@@ -269,3 +270,23 @@ export class ClickyAgent {
 }
 
 const makeId = (): string => Math.random().toString(36).slice(2, 10)
+
+/**
+ * Resolve which ChatProvider to use based on the config. Explicit provider
+ * instances win. Strings pick a built-in. Otherwise we sniff the model id:
+ * anything vendor-prefixed (google/, openai/, meta-llama/, anthropic/…) is
+ * routed through the OpenAI-compatible provider, which is the format spoken
+ * by OpenRouter and most gateways. A bare "claude-*" keeps the native
+ * Anthropic provider for backward compatibility.
+ */
+const resolveProvider = (config: ClickyConfig): ChatProvider => {
+  const provider = config.provider
+  if (provider && typeof provider === 'object') return provider
+  if (provider === 'anthropic') return new AnthropicProvider(config.apiUrl)
+  if (provider === 'openai') return new OpenAIProvider(config.apiUrl)
+  const model = config.model ?? ''
+  if (/^(google|openai|meta-llama|mistralai|deepseek|qwen|x-ai|anthropic)\//i.test(model)) {
+    return new OpenAIProvider(config.apiUrl)
+  }
+  return new AnthropicProvider(config.apiUrl)
+}
