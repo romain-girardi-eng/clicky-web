@@ -426,14 +426,35 @@ const resolveVoiceOutput = (config: ClickyConfig, fallback: VoiceOutput): VoiceO
   if (provider === 'elevenlabs') {
     const el = config.voice?.elevenlabs
     if (el?.proxyUrl && ElevenLabsVoiceOutput.isSupported()) {
-      return new ElevenLabsVoiceOutput({
+      // Wrap so that if ElevenLabs fails at runtime (missing API key,
+      // upstream 5xx…) we transparently re-speak the same text via
+      // Web Speech. The user never gets silence.
+      let failed = false
+      const eleven = new ElevenLabsVoiceOutput({
         proxyUrl: el.proxyUrl,
         voiceId: el.voiceId,
         onError: (err: Error) => {
-          if (typeof console !== 'undefined') console.warn('[clicky] elevenlabs TTS error, falling back:', err.message)
-          // Best-effort fallback — speak the last sentence via Web Speech.
+          failed = true
+          if (typeof console !== 'undefined') console.warn('[clicky] elevenlabs TTS error, falling back to Web Speech:', err.message)
         },
       })
+      const wrapper: VoiceOutputLike = {
+        isSupported: () => eleven.isSupported() || fallback.isSupported(),
+        isSpeaking: () => eleven.isSpeaking() || fallback.isSpeaking(),
+        stop: () => {
+          eleven.stop()
+          fallback.stop()
+        },
+        speak: async (text: string) => {
+          if (failed) {
+            await fallback.speak(text)
+            return
+          }
+          await eleven.speak(text)
+          if (failed) await fallback.speak(text)
+        },
+      }
+      return wrapper
     }
     return fallback
   }
