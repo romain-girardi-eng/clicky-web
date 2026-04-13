@@ -1,0 +1,22 @@
+{
+  "name": "@clicky/proxy",
+  "version": "0.1.0",
+  "description": "Reference proxy templates for Clicky (Vercel Edge, Cloudflare Worker).",
+  "author": "Romain Girardi",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": ["dist", "src"],
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run --passWithNoTests",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "tsup": "^8.3.0",
+    "typescript": "^5.6.2",
+    "vitest": "^2.1.2",
+    "@types/node": "^20.14.0"
+  }
+}
