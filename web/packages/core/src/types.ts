@@ -75,6 +75,12 @@ export interface ClickyTheme {
 export interface ClickyVoiceConfig {
   input?: boolean
   output?: boolean
+  autoSpeak?: boolean
+  lang?: string
+}
+
+export interface ClickyHotkeyConfig {
+  activate?: string
 }
 
 export interface ClickyConfig {
@@ -87,6 +93,7 @@ export interface ClickyConfig {
   navigate?: (url: string) => void
   provider?: ChatProvider | 'anthropic' | 'openai'
   maxTokens?: number
+  hotkey?: ClickyHotkeyConfig
 }
 
 export interface AgentMessage {

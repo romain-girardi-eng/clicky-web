@@ -20,6 +20,9 @@ import { AnthropicProvider, MockProvider } from './llm-client'
 import { OpenAIProvider } from './openai-client'
 import { createBuiltInActions } from './built-in-actions'
 import { VoiceIO } from './voice-io'
+import { AnimatedCursor } from './animated-cursor'
+import { InlinePointParser, type PointTag } from './inline-point-parser'
+import { VoiceOutput, SentenceBuffer } from './voice-output'
 import type {
   ActionDefinition,
   AgentMessage,
@@ -34,11 +37,17 @@ import type {
 const DEFAULT_MODEL = 'claude-sonnet-4-5'
 const DEFAULT_SYSTEM = `You are Clicky, an embedded assistant inside a web application.
 You can see a compact summary of the page the user is currently on (provided as JSON in the user message) and you have tools to highlight, click, fill, navigate, read, and finish.
-When the user asks "where do I do X", do not just answer in text — call the highlight tool with a target description so the user actually sees it on screen.
-Keep responses short, concrete, and grounded in what is actually visible.
-Always finish with the "done" tool when the user request is satisfied.`
+
+Two ways to point at UI elements:
+1) Inline tag: embed \`[POINT:<selector>:<label>]\` directly in your response. The web client parses these tags, strips them from the displayed text, and flies a blue cursor to the target. Example: "Pour créer un reçu, cliquez [POINT:button[aria-label='Générer un reçu']:Générer un reçu]."
+2) Tool call: use the \`highlight\` tool for a persistent spotlight with a longer message.
+
+Use the inline tag for quick visual pointers during an explanation, and the \`highlight\` tool when the user actually needs the element to stay visually marked.
+
+Keep responses short, concrete, and grounded in what is actually visible. You may use markdown (bold, italics, bullet lists, code). Always finish with the "done" tool when the user request is satisfied.`
 
 type AgentListener = (state: { state: AgentState; messages: AgentMessage[] }) => void
+export type PointingListener = (tag: PointTag) => void
 
 interface InternalReadable {
   label: string
@@ -50,10 +59,13 @@ export class ClickyAgent {
   readonly overlay: HighlightOverlay
   readonly actions: ActionRegistry
   readonly voice: VoiceIO
+  readonly cursor: AnimatedCursor
+  readonly voiceOutput: VoiceOutput
 
   private readonly provider: ChatProvider
   private readonly readables = new Map<string, InternalReadable>()
   private readonly listeners = new Set<AgentListener>()
+  private readonly pointingListeners = new Set<PointingListener>()
   private messages: AgentMessage[] = []
   private historyForLLM: ChatMessage[] = []
   private currentState: AgentState = 'idle'
@@ -63,7 +75,10 @@ export class ClickyAgent {
     this.dom = new DomReader()
     this.overlay = new HighlightOverlay()
     this.actions = new ActionRegistry()
-    this.voice = new VoiceIO(config.locale === 'fr' ? 'fr-FR' : 'en-US')
+    const lang = config.voice?.lang ?? (config.locale === 'fr' ? 'fr-FR' : 'en-US')
+    this.voice = new VoiceIO(lang)
+    this.cursor = new AnimatedCursor()
+    this.voiceOutput = new VoiceOutput(lang)
     this.provider = resolveProvider(config)
     this.registerBuiltInActions()
   }
@@ -77,6 +92,7 @@ export class ClickyAgent {
   mount(target: Element = document.body): void {
     this.dom.start()
     this.overlay.mount()
+    this.cursor.mount()
     void target
   }
 
@@ -84,6 +100,18 @@ export class ClickyAgent {
     this.abortController?.abort()
     this.dom.stop()
     this.overlay.unmount()
+    this.cursor.unmount()
+    this.voiceOutput.stop()
+  }
+
+  onPointing(listener: PointingListener): () => void {
+    this.pointingListeners.add(listener)
+    return () => this.pointingListeners.delete(listener)
+  }
+
+  emitPointing(tag: PointTag): void {
+    for (const listener of this.pointingListeners) listener(tag)
+    void this.cursor.flyTo(tag.selector, { label: tag.label })
   }
 
   readable(label: string, getter: ReadableGetter): () => void {
@@ -169,7 +197,12 @@ export class ClickyAgent {
           role: 'assistant',
           content: [{ type: 'text', text }],
         })
-        if (this.config.voice?.output) this.voice.speak(text)
+        // Legacy-safe: if TTS output is enabled but autoSpeak is not (so we
+        // did not stream per-sentence during the response), speak the whole
+        // message now.
+        if (this.config.voice?.output && !this.config.voice?.autoSpeak) {
+          void this.voiceOutput.speak(text)
+        }
       }
 
       if (toolCalls.length === 0) {
@@ -206,11 +239,22 @@ export class ClickyAgent {
     toolCalls: Array<{ id: string; name: string; input: Record<string, unknown> }>
   }> {
     let text = ''
+    const pointParser = new InlinePointParser()
+    const sentenceBuffer = new SentenceBuffer()
+    const autoSpeak = Boolean(this.config.voice?.output && this.config.voice?.autoSpeak)
     const toolCalls: Array<{ id: string; name: string; input: Record<string, unknown>; raw: string }> = []
     let active: { id: string; name: string; raw: string } | null = null
     for await (const event of events) {
       if (event.type === 'text_delta' && event.text) {
-        text += event.text
+        const { visibleText, points } = pointParser.push(event.text)
+        if (visibleText) {
+          text += visibleText
+          if (autoSpeak) {
+            const sentences = sentenceBuffer.push(visibleText)
+            for (const sentence of sentences) void this.voiceOutput.speak(sentence)
+          }
+        }
+        for (const tag of points) this.emitPointing(tag)
       } else if (event.type === 'tool_use_start' && event.toolUseId && event.toolName) {
         active = { id: event.toolUseId, name: event.toolName, raw: '' }
       } else if (event.type === 'tool_use_input_delta' && active && event.inputJsonDelta) {
@@ -227,6 +271,20 @@ export class ClickyAgent {
       } else if (event.type === 'error') {
         text += `\n[error: ${event.error}]`
       }
+    }
+    // Drain any pending text left in the parser (unterminated tag, trailing
+    // characters held back to disambiguate a split delta).
+    const tail = pointParser.flush()
+    if (tail) {
+      text += tail
+      if (autoSpeak) {
+        const sentences = sentenceBuffer.push(tail)
+        for (const sentence of sentences) void this.voiceOutput.speak(sentence)
+      }
+    }
+    if (autoSpeak) {
+      const remaining = sentenceBuffer.flush()
+      if (remaining) void this.voiceOutput.speak(remaining)
     }
     return { text, toolCalls: toolCalls.map(({ id, name, input }) => ({ id, name, input })) }
   }

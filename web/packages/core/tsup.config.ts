@@ -9,4 +9,5 @@ export default defineConfig({
   treeshake: true,
   target: 'es2022',
   minify: false,
+  external: ['modern-screenshot'],
 })

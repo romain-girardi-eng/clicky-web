@@ -7,6 +7,7 @@
 import type { ActionDefinition, ClickyConfig } from './types'
 import type { DomReader } from './dom-reader'
 import type { HighlightOverlay } from './highlight-overlay'
+import { ScreenCapture } from './screen-capture'
 
 export interface BuiltInDeps {
   dom: DomReader
@@ -111,6 +112,25 @@ export const createBuiltInActions = (deps: BuiltInDeps): ActionDefinition[] => {
         const { target } = input as { target: string }
         const element = resolveTarget(target)
         return { text: (element.textContent ?? '').trim().slice(0, 500) }
+      },
+    },
+    {
+      name: 'screenshot',
+      description:
+        'Capture the current viewport as a PNG. Returns a data URL the host can feed back in a follow-up message as a vision input. Use sparingly — only when DOM context alone is insufficient.',
+      schema: {
+        type: 'object',
+        properties: {},
+      },
+      handler: async () => {
+        if (!ScreenCapture.isSupported()) return { ok: false, error: 'screenshot not supported' }
+        try {
+          const capture = new ScreenCapture()
+          const image = await capture.captureViewport()
+          return { ok: true, image }
+        } catch (error) {
+          return { ok: false, error: error instanceof Error ? error.message : String(error) }
+        }
       },
     },
     {
