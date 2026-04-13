@@ -1,0 +1,15 @@
+{
+  "name": "@clicky/proxy-vercel",
+  "version": "0.1.0",
+  "description": "Vercel Edge Function template that proxies Clicky requests to the Anthropic API. Copy the route into your project, set ANTHROPIC_API_KEY, deploy.",
+  "author": "Romain Girardi",
+  "license": "MIT",
+  "type": "module",
+  "private": false,
+  "files": ["template", "README.md"],
+  "scripts": {
+    "build": "echo \"@clicky/proxy-vercel is a copy-paste template, no build needed\"",
+    "test": "echo \"@clicky/proxy-vercel has no automated tests\"",
+    "typecheck": "echo \"@clicky/proxy-vercel is consumed via copy-paste\""
+  }
+}

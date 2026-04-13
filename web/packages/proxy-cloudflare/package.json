@@ -1,0 +1,15 @@
+{
+  "name": "@clicky/proxy-cloudflare",
+  "version": "0.1.0",
+  "description": "Cloudflare Workers template that proxies Clicky requests to the Anthropic API.",
+  "author": "Romain Girardi",
+  "license": "MIT",
+  "type": "module",
+  "private": false,
+  "files": ["template", "README.md"],
+  "scripts": {
+    "build": "echo \"@clicky/proxy-cloudflare is a copy-paste template, no build needed\"",
+    "test": "echo \"@clicky/proxy-cloudflare has no automated tests\"",
+    "typecheck": "echo \"@clicky/proxy-cloudflare is consumed via copy-paste\""
+  }
+}
