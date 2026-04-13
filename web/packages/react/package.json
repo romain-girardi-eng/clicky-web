@@ -1,0 +1,42 @@
+{
+  "name": "@clicky/react",
+  "version": "0.1.0",
+  "description": "React bindings for Clicky — provider, hooks, widget.",
+  "author": "Romain Girardi",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": ["dist"],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "react": ">=18.0.0"
+  },
+  "dependencies": {
+    "@clicky/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.0",
+    "@testing-library/react": "^16.0.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "@types/react-dom": "^18.3.0",
+    "tsup": "^8.3.0",
+    "typescript": "^5.6.2",
+    "vitest": "^2.1.2",
+    "jsdom": "^25.0.1"
+  }
+}
