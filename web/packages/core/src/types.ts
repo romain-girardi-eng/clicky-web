@@ -83,6 +83,17 @@ export interface ClickyHotkeyConfig {
   activate?: string
 }
 
+export interface ClickyCursorConfig {
+  /** When true (default), the cursor is always visible and follows the user's mouse like a familiar. When false, it's hidden until a `flyTo()` call. */
+  persistent?: boolean
+  /** Color of the cursor SVG. Defaults to '#3b82f6'. */
+  color?: string
+  /** Lerp factor for follow movement (0-1). Lower is laggier. Default 0.15. */
+  lerpFactor?: number
+  /** Whether the cursor should idle-pulse when not doing anything. Default true. */
+  idleAnimation?: boolean
+}
+
 export interface ClickyConfig {
   apiUrl: string
   model?: string
@@ -94,6 +105,7 @@ export interface ClickyConfig {
   provider?: ChatProvider | 'anthropic' | 'openai'
   maxTokens?: number
   hotkey?: ClickyHotkeyConfig
+  cursor?: ClickyCursorConfig
 }
 
 export interface AgentMessage {

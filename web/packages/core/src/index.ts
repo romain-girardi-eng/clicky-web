@@ -31,6 +31,7 @@ export type {
   ChatProvider,
   ChatRequest,
   ClickyConfig,
+  ClickyCursorConfig,
   ClickyHotkeyConfig,
   ClickyTheme,
   ClickyVoiceConfig,

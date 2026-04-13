@@ -77,7 +77,12 @@ export class ClickyAgent {
     this.actions = new ActionRegistry()
     const lang = config.voice?.lang ?? (config.locale === 'fr' ? 'fr-FR' : 'en-US')
     this.voice = new VoiceIO(lang)
-    this.cursor = new AnimatedCursor()
+    this.cursor = new AnimatedCursor({
+      persistent: config.cursor?.persistent ?? true,
+      color: config.cursor?.color ?? config.theme?.primary ?? '#3b82f6',
+      lerpFactor: config.cursor?.lerpFactor,
+      idleAnimation: config.cursor?.idleAnimation ?? true,
+    })
     this.voiceOutput = new VoiceOutput(lang)
     this.provider = resolveProvider(config)
     this.registerBuiltInActions()
@@ -190,19 +195,37 @@ export class ClickyAgent {
 
       const { text, toolCalls } = await this.consumeStream(events)
 
-      if (text.trim()) {
-        const message: AgentMessage = { id: makeId(), role: 'assistant', text, createdAt: Date.now() }
+      // Some models (notably Gemini with customtools) return their final
+      // user-facing answer ONLY through a `done` tool call, with zero text
+      // deltas. We unwrap any `done` tool first so its message becomes the
+      // visible assistant message even when `text` is empty.
+      const doneCall = toolCalls.find((c) => c.name === 'done')
+      const doneMessage =
+        doneCall && typeof (doneCall.input as { message?: unknown }).message === 'string'
+          ? ((doneCall.input as { message: string }).message ?? '').trim()
+          : ''
+      const visibleText = text.trim() || doneMessage
+
+      if (visibleText) {
+        const message: AgentMessage = { id: makeId(), role: 'assistant', text: visibleText, createdAt: Date.now() }
         this.appendMessage(message)
         this.historyForLLM.push({
           role: 'assistant',
-          content: [{ type: 'text', text }],
+          content: [{ type: 'text', text: visibleText }],
         })
         // Legacy-safe: if TTS output is enabled but autoSpeak is not (so we
         // did not stream per-sentence during the response), speak the whole
         // message now.
         if (this.config.voice?.output && !this.config.voice?.autoSpeak) {
-          void this.voiceOutput.speak(text)
+          void this.voiceOutput.speak(visibleText)
         }
+      }
+
+      // If the model called `done`, the turn is over. Don't loop, don't
+      // execute it as a tool — the message is already shown.
+      if (doneCall) {
+        this.setState('idle')
+        return
       }
 
       if (toolCalls.length === 0) {
@@ -306,7 +329,13 @@ export class ClickyAgent {
       dom: this.dom,
       overlay: this.overlay,
       config: this.config,
-      onAssistantText: () => undefined,
+      // Fallback path: if `done` is somehow executed as a regular tool (older
+      // call sites, custom providers), the message still surfaces in the chat.
+      onAssistantText: (text: string) => {
+        const trimmed = text.trim()
+        if (!trimmed) return
+        this.appendMessage({ id: makeId(), role: 'assistant', text: trimmed, createdAt: Date.now() })
+      },
     })
     for (const action of builtIns) this.actions.register(action)
   }
@@ -318,6 +347,7 @@ export class ClickyAgent {
 
   private setState(state: AgentState): void {
     this.currentState = state
+    this.cursor.setState(state)
     this.notify()
   }
 
