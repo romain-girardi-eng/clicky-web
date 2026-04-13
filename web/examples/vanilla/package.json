@@ -1,0 +1,9 @@
+{
+  "name": "@clicky-examples/vanilla",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Vanilla HTML example for @clicky/core. Open via a local HTTP server after building core.",
+  "scripts": {
+    "serve": "npx --yes serve ."
+  }
+}
